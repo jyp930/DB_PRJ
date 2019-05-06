@@ -1,0 +1,1273 @@
+options
+{
+  static = true;
+  DEBUG_PARSER = false;
+  IGNORE_CASE = true;
+}
+
+PARSER_BEGIN(SimpleDBMSParser)
+package QueryParser;
+
+import java.io.*;
+import java.util.*;
+
+import com.sleepycat.je.Database;
+import com.sleepycat.je.DatabaseException;
+import com.sleepycat.je.DatabaseEntry;
+import com.sleepycat.je.DatabaseConfig;
+import com.sleepycat.je.Cursor;
+import com.sleepycat.je.LockMode;
+import com.sleepycat.je.OperationStatus;
+
+import com.sleepycat.je.Environment;
+import com.sleepycat.je.EnvironmentConfig;
+
+public class SimpleDBMSParser 
+{
+  
+  public static final int ERROR_FLAG = -1;
+  // ENUM FOR PRINT_VALUE
+  public static final int PRINT_SYNTAX_ERROR = 0;
+  public static final int PRINT_CREATE_TABLE = 1;
+  public static final int PRINT_DROP_TABLE = 2;
+  public static final int PRINT_DESC = 3;
+  public static final int PRINT_SHOW_TABLES = 4;
+  public static final int PRINT_SELECT = 5;
+  public static final int PRINT_INSERT = 6;
+  public static final int PRINT_DELETE = 7;
+
+  public static final int SyntaxError = 8;
+  public static final int CreateTableSuccess = 9;
+  public static final int DuplicateColumnDefError = 10;
+  public static final int DuplicatePrimaryKeyDefError = 11;
+  public static final int ReferenceTypeError = 12;
+  public static final int ReferenceNonPrimaryKeyError = 13;
+  public static final int ReferenceColumnExistenceError = 14;
+  public static final int ReferenceTableExistenceError = 15;
+  public static final int NonExistingColumnDefError = 16;
+  public static final int TableExistenceError = 17;
+  public static final int DropSuccess = 18;
+  public static final int ShowTablesNoTable = 20;
+  public static final int NoSuchTable = 21;
+  public static final int CharLengthError = 22;
+  
+
+
+  public static void main(String args[]) throws ParseException
+  {
+    /* Project 1-2 */
+
+	// Environment & Database define
+    Environment myDbEnvironment = null;
+    Database myDatabase = null;
+  
+	/* OPENING DB */
+	
+	// Open Database Environment or if not, create one.
+	EnvironmentConfig envConfig = new EnvironmentConfig();
+	envConfig.setAllowCreate(true);
+	myDbEnvironment = new Environment(new File("db/"), envConfig);
+	
+	// Open Database or if not, create one.
+/*
+	DatabaseConfig dbConfig = new DatabaseConfig();
+	dbConfig.setAllowCreate(true);
+	dbConfig.setSortedDuplicates(true);
+	myDatabase = myDbEnvironment.openDatabase(null, "aa", dbConfig);
+*/
+
+	
+
+	Cursor cursor = null;
+	/* < key, value > DB에 넣기 */
+/*
+	DatabaseEntry key;
+	DatabaseEntry data;
+
+	try {
+		cursor = myDatabase.openCursor(null, null);
+		key = new DatabaseEntry("key_d".getBytes("UTF-8"));
+		data = new DatabaseEntry("value_d2".getBytes("UTF-8"));
+		cursor.put(key,data);
+	} catch (DatabaseException de) {
+	  
+	} catch (UnsupportedEncodingException e) {
+		e.printStackTrace();
+	}
+*/
+	/* < key, value > 찾아서 가져오기 */
+/*
+	DatabaseEntry foundKey = new DatabaseEntry();
+	DatabaseEntry foundData = new DatabaseEntry();
+	try {
+		cursor = myDatabase.openCursor(null, null);
+	} catch (Exception e) {
+
+	}
+	cursor.getFirst(foundKey, foundData, LockMode.DEFAULT);
+	if(foundKey.getData() != null) { 
+		do {
+			try {
+				String keyString = new String(foundKey.getData(), "UTF-8");
+				String dataString = new String(foundData.getData(), "UTF-8");
+				System.out.println(keyString);
+				System.out.println(dataString);
+			} catch (DatabaseException de) {
+			  
+			} catch (UnsupportedEncodingException e) {
+				e.printStackTrace();
+			}
+	
+		} while ( cursor.getNext(foundKey, foundData, LockMode.DEFAULT) == OperationStatus.SUCCESS );
+	}
+*/
+
+	/*Close DB 
+	if(myDatabase != null) {
+	  cursor.close();
+	  myDatabase.close();
+	}
+	
+	if(myDbEnvironment != null) myDbEnvironment.close();
+    */
+	
+  
+	
+	
+	/* Project 1-1 */
+    SimpleDBMSParser parser = new SimpleDBMSParser(System.in);
+    System.out.print("DB_2016-12299> ");
+	
+    while (true)
+    {
+      try
+      {
+        parser.command(myDbEnvironment); // command 실행
+      }
+      catch (Exception e)
+      {
+        ArrayList q = new ArrayList();
+        q.add(PRINT_SYNTAX_ERROR);
+        printMessage(q, null);
+		
+        SimpleDBMSParser.ReInit(System.in);
+      }
+    }
+    
+  }
+
+  public static void printMessage(ArrayList q, Environment myDbEnvironment)
+  {
+    Database myDatabase = null;
+    Database ref_myDatabase = null;
+	DatabaseConfig dbConfig = new DatabaseConfig();
+	
+    int i;
+    int j;
+    int size;
+    int flag = 0;
+    List myDbNames;
+    TablePlusContents tpc = new TablePlusContents();
+    ArrayList all_contents = new ArrayList();
+    ArrayList sub_contents = new ArrayList();
+    ArrayList column_list = new ArrayList();
+    ArrayList fk_list = new ArrayList();
+    
+    ArrayList<String> column_name_list = new ArrayList<String>();
+    ArrayList<String> pk_columns = new ArrayList<String>();
+	ArrayList<String> fk_referencing_columns = new ArrayList<String>();
+	ArrayList<String> fk_referenced_tables = new ArrayList<String>();
+	ArrayList<String> fk_referenced_column = new ArrayList<String>();
+
+    
+    switch((int)q.get(0))
+    {
+      case PRINT_SYNTAX_ERROR:
+      	printErrorMessage(SyntaxError);
+      	break;
+      case PRINT_CREATE_TABLE:
+      	// 인자 얻기
+      	tpc = (TablePlusContents)q.get(1);
+      	String table_name = tpc.getTableName();
+      	all_contents = tpc.getContents();
+      	
+      	System.out.println( all_contents );
+
+		// 시작
+		myDbNames = myDbEnvironment.getDatabaseNames();
+		size = myDbNames.size();
+		for(i=0; i < size; i++) {
+		  	String temp = ((String)myDbNames.get(i)).toLowerCase();
+			if(temp.equals(table_name)) break;
+		}
+	    if(i == size) { // 같은 이름의 table 없음
+	    	int temp_counter = 0;
+			// column name 추출
+			for(j=0; j < all_contents.size(); j++) {  // 모든 contents를 하나씩 검사
+				sub_contents = (ArrayList)all_contents.get(j);
+				
+				if( !(sub_contents.get(0)).equals("primary key") && !(sub_contents.get(0)).equals("foreign key")) {  // 1. column
+				  	for(String column_name : column_name_list){
+					    if(column_name.equals(sub_contents.get(0))) {  // column에 중복 발견
+							printErrorMessage(DuplicateColumnDefError);
+							flag = ERROR_FLAG;
+							break;
+					    }
+					}
+					if (flag == ERROR_FLAG) break;
+					// charLengthError 검출
+					if(((String)sub_contents.get(1)).contains("char")) {
+						String temp_char = ((String)sub_contents.get(1)).substring(5,((String)sub_contents.get(1)).length()-1);
+						if(Integer.parseInt(temp_char) < 1) {
+						    printErrorMessage(CharLengthError);
+							flag = ERROR_FLAG;
+							break;
+						}
+					}
+
+					// column 통과
+					if (flag == ERROR_FLAG) break;
+					column_list.add(sub_contents);
+					column_name_list.add((String)sub_contents.get(0));
+					
+				} else if ((sub_contents.get(0)).equals("primary key")) {  // 2. primary key
+					temp_counter++;
+					if(temp_counter > 1) {	// primary key가 두 개 이상일 때
+						printErrorMessage(DuplicatePrimaryKeyDefError);
+						flag = ERROR_FLAG;
+						break;
+					} else {
+						pk_columns = (ArrayList)sub_contents.get(1);
+					}
+				} else if ((sub_contents.get(0)).equals("foreign key")) {  // 3. foreign key
+					fk_list.add(sub_contents);
+				}
+			}
+			if (flag == ERROR_FLAG) break; // error가 있었다면 query 종료
+			
+			System.out.println("column :" + column_list);
+			System.out.println("pk: " + pk_columns);
+
+			// primary key 처리
+			for(String column_name : pk_columns) {	// pk_column에 해당하는 column이 존재하지 않는 경우 error
+				if( !column_name_list.contains(column_name) ) {
+					printErrorMessage(NonExistingColumnDefError, column_name);
+					flag = ERROR_FLAG;
+					break;
+				}
+			}
+			if (flag == ERROR_FLAG) break;
+			
+			// foreign key 처리
+			for(j=0; j < fk_list.size(); j++) {
+			  	ArrayList sub_fk = (ArrayList)fk_list.get(j);
+			  	ArrayList<String> fk_columns = (ArrayList)sub_fk.get(1);
+				String referenced_table_name = (String)sub_fk.get(2);
+				ArrayList<String> referenced_columns = (ArrayList)sub_fk.get(3);
+
+				// error: 같은 테이블을 참조할 경우
+				if(table_name.equals(referenced_table_name)) {
+				  	System.out.println("cannot reference myself");
+					flag = ERROR_FLAG;
+					break;
+				}
+
+				// error: 없는 column일 경우
+				for(String column_name : fk_columns) {
+					if( !(column_name_list.contains(column_name)) ) {
+						printErrorMessage(NonExistingColumnDefError, column_name);
+						flag = ERROR_FLAG;
+						break;
+					}
+				}
+				if (flag == ERROR_FLAG) break;
+				// error: 개수가 다를 경우
+				if(fk_columns.size() != referenced_columns.size()) {
+					printErrorMessage(ReferenceTypeError);
+					flag = ERROR_FLAG;
+					break;
+				}
+				if (flag == ERROR_FLAG) break;
+				
+				try { 
+					// 참조하는 table 열기
+					dbConfig.setAllowCreate(false); // table이 없으면 error 처리하기 위함
+					dbConfig.setSortedDuplicates(true);
+					ref_myDatabase = myDbEnvironment.openDatabase(null, referenced_table_name, dbConfig);
+				} catch (Exception e) {
+					printErrorMessage(ReferenceTableExistenceError);
+				}
+				/* < key, value > 찾아서 가져오기 */
+				DatabaseEntry foundKey = new DatabaseEntry();
+				DatabaseEntry foundData = new DatabaseEntry();
+				ArrayList<String> key_array = new ArrayList();
+				ArrayList<String> data_array = new ArrayList();
+				Cursor cursor = null;
+				try {
+					cursor = ref_myDatabase.openCursor(null, null);
+				} catch (Exception e) {
+					System.out.println("cursor open error");
+				}
+				cursor.getFirst(foundKey, foundData, LockMode.DEFAULT);
+				if(foundKey.getData() != null) {
+					do {
+						try {
+							String keyString = new String(foundKey.getData(), "UTF-8");
+							String dataString = new String(foundData.getData(), "UTF-8");
+
+							key_array.add(keyString);
+							data_array.add(dataString);
+						} catch (DatabaseException de) {
+						  
+						} catch (UnsupportedEncodingException e) {
+							e.printStackTrace();
+						}
+					} while ( cursor.getNext(foundKey, foundData, LockMode.DEFAULT) == OperationStatus.SUCCESS );
+				}
+
+				// error: 없는 column을 참조할 경우, primary key가 아닌 것을 참조할 경우
+				for(String ref_column_name : referenced_columns) {
+					if( !(key_array.contains(ref_column_name+":column_name")) ) {  // error: 없는 column을 참조할 경우
+						printErrorMessage(ReferenceColumnExistenceError);
+						flag = ERROR_FLAG;
+						break;
+					}
+					if( !(key_array.contains(ref_column_name+":primary_key")) ) {  // error: primary key가 아닌 것을 참조할 경우
+						printErrorMessage(ReferenceNonPrimaryKeyError);
+						flag = ERROR_FLAG;
+						break;
+					}
+				}
+				if (flag == ERROR_FLAG) break;
+				// error: 타입이 다를 경우
+				for(int k=0; k < fk_columns.size(); k++) { 
+					int index; int index2;
+					if( (index = key_array.indexOf(referenced_columns.get(k)+":type")) != -1 ) {  // error: 타입이 다를 경우
+						if( (index2 = column_name_list.indexOf(fk_columns.get(k))) != -1 ) {
+						  //System.out.println(data_array.get(index));
+						  //System.out.println(((ArrayList)column_list.get(index2)).get(1));
+						  if( !( (data_array.get(index)).equals(((ArrayList)column_list.get(index2)).get(1)) ) ) { 
+								printErrorMessage(ReferenceTypeError);
+								flag = ERROR_FLAG;
+								break;
+						  }
+						} else System.out.println("column non exist error");
+					} else System.out.println("type non exist error");
+				}
+
+
+				// error 없으면  fk_referencing_columns에 저장
+				for(String column_name : fk_columns) {
+					fk_referencing_columns.add(column_name);
+				}
+				
+				// 참조하는 table 닫기
+				if(ref_myDatabase != null) {
+				  cursor.close();
+				  ref_myDatabase.close();
+				}
+			}
+			if (flag == ERROR_FLAG) break;
+
+			// table 만들기 시작
+			dbConfig.setAllowCreate(true); // table이 없으면 error 처리하기 위함
+			dbConfig.setSortedDuplicates(true);
+			myDatabase = myDbEnvironment.openDatabase(null, table_name, dbConfig);
+			Cursor cursor = null;
+			
+			/* < key, value > DB에 넣기 */
+			DatabaseEntry key;
+			DatabaseEntry data;
+			try {
+				cursor = myDatabase.openCursor(null, null);
+				// column
+				for(j=0; j < column_list.size(); j++) {
+				  	ArrayList<String> each_column = new ArrayList<String>();
+				  	each_column = (ArrayList<String>)column_list.get(j);
+
+					// column order
+					key = new DatabaseEntry((each_column.get(0)+":order").getBytes("UTF-8"));
+					data = new DatabaseEntry(String.valueOf(j).getBytes("UTF-8"));
+					cursor.put(key,data);
+				  	// column 이름
+					key = new DatabaseEntry((each_column.get(0)+":column_name").getBytes("UTF-8"));
+					data = new DatabaseEntry(each_column.get(0).getBytes("UTF-8"));
+					cursor.put(key,data);
+					// column type
+					key = new DatabaseEntry((each_column.get(0)+":type").getBytes("UTF-8"));
+					data = new DatabaseEntry(each_column.get(1).getBytes("UTF-8"));
+					cursor.put(key,data);
+					// column not_null
+					if(each_column.get(2).equals("not null")) { 
+						key = new DatabaseEntry((each_column.get(0)+":not_null").getBytes("UTF-8"));
+						data = new DatabaseEntry("Y".getBytes("UTF-8"));
+						cursor.put(key,data);
+					}
+					//pk
+					if(pk_columns.contains(each_column.get(0))) {
+						// column primary key
+						key = new DatabaseEntry((each_column.get(0)+":primary_key").getBytes("UTF-8"));
+						data = new DatabaseEntry("Y".getBytes("UTF-8"));
+						cursor.put(key,data);
+						// column not null
+						key = new DatabaseEntry((each_column.get(0)+":not_null").getBytes("UTF-8"));
+						data = new DatabaseEntry("Y".getBytes("UTF-8"));
+						cursor.put(key,data);
+					}
+					//fk
+					if(fk_referencing_columns.contains(each_column.get(0))) {
+						// column primary key
+						key = new DatabaseEntry((each_column.get(0)+":foreign_key").getBytes("UTF-8"));
+						data = new DatabaseEntry("Y".getBytes("UTF-8"));
+						cursor.put(key,data);
+					}
+				
+				}
+				
+			} catch (Exception e) {
+			  	System.out.println(e);
+			}
+			
+			/* Close DB */
+			if(myDatabase != null) {
+			  cursor.close();
+			  myDatabase.close();
+			}
+			
+			printSuccessMessage(CreateTableSuccess, table_name);
+	
+		} else if (i < size) { // 이미 같은 이름의 table이 존재
+      		printErrorMessage(TableExistenceError);
+      		break;
+		}
+      	break;
+      case PRINT_DROP_TABLE:
+		dbConfig.setAllowCreate(false); // table이 없으면 error 처리하기 위함
+		dbConfig.setSortedDuplicates(true);
+		try {
+			myDatabase = myDbEnvironment.openDatabase(null, ((String)q.get(1)).toLowerCase(), dbConfig); // case insensitive
+			String dbName = myDatabase.getDatabaseName();
+			myDatabase.close();
+			myDbEnvironment.removeDatabase(null, dbName);
+			printSuccessMessage(DropSuccess, dbName);
+		} catch (Exception e) {
+			printErrorMessage(NoSuchTable);
+		} 
+
+      	break;
+      case PRINT_DESC:
+      	dbConfig.setAllowCreate(false); // table이 없으면 error 처리하기 위함
+		dbConfig.setSortedDuplicates(true);
+		try {
+			myDatabase = myDbEnvironment.openDatabase(null, ((String)q.get(1)).toLowerCase(), dbConfig); // case insensitive
+			String dbName = myDatabase.getDatabaseName();
+			Cursor cursor = null;
+
+			ArrayList<String> key_array = new ArrayList<String>();
+			ArrayList<String> data_array = new ArrayList<String>();
+			ArrayList<String> column_array = new ArrayList<String>();
+			ArrayList<String> order_array = new ArrayList<String>();
+			/* < key, value > 찾아서 가져오기 */
+			DatabaseEntry foundKey = new DatabaseEntry();
+			DatabaseEntry foundData = new DatabaseEntry();
+			try {
+				cursor = myDatabase.openCursor(null, null);
+			} catch (Exception e) {
+				System.out.println("cursor open error");
+			}
+			cursor.getFirst(foundKey, foundData, LockMode.DEFAULT);
+			if(foundKey.getData() != null) {
+				do {
+					try {
+						String keyString = new String(foundKey.getData(), "UTF-8");
+						String dataString = new String(foundData.getData(), "UTF-8");
+						
+						if(keyString.contains(":column_name")) column_array.add(dataString);
+						if(keyString.contains(":order")) order_array.add(dataString);
+						key_array.add(keyString);
+						data_array.add(dataString);
+					} catch (DatabaseException de) {
+					  
+					} catch (UnsupportedEncodingException e) {
+						e.printStackTrace();
+					}
+			
+				} while ( cursor.getNext(foundKey, foundData, LockMode.DEFAULT) == OperationStatus.SUCCESS );
+			}
+			System.out.println(column_array);
+			System.out.println(key_array);
+			System.out.println(data_array);
+			System.out.println(order_array);
+			// order array도 출력!!!
+			// desc 출력
+			System.out.println("-----------------------------------------");
+			System.out.println("table_name [" + dbName + "]");
+			System.out.println("column_name"+"       "+"type"+"        "+"null"+"        "+"key");
+			
+			for(i=0; i < column_array.size(); i++) {
+				int index = 0;
+				String order = order_array.get(i);
+				// order를 i번째꺼를 찾고, 그걸 column_Arry.get 의 인자로 넘긴다.!!!
+				String column_name = column_array.get(Integer.parseInt(order));
+				
+				if( (index = key_array.indexOf(column_name+":column_name")) != -1 )  System.out.print(data_array.get(index)+"          ");
+			  	if( (index = key_array.indexOf(column_name+":type")) != -1 )  System.out.print(data_array.get(index)+"          ");
+			  	 if( (index = key_array.indexOf(column_name+":not_null")) != -1 )  System.out.print("N          ");
+			  	 else  System.out.print("Y           ");
+
+				boolean pk_index = ((key_array.indexOf(column_name+":primary_key")) != -1);
+				boolean fk_index = ((key_array.indexOf(column_name+":foreign_key")) != -1);
+			  	if( pk_index && fk_index )  System.out.print("PRI/FOR");
+			  	else if ( pk_index && !fk_index) System.out.print("PRI");
+			  	else if ( !pk_index && fk_index) System.out.print("FOR");
+				System.out.println();
+			}
+			
+			System.out.println("-----------------------------------------");
+
+			/* Close DB */
+			if(myDatabase != null) {
+			  cursor.close();
+			  myDatabase.close();
+			}
+		
+		} catch (Exception e) {
+			printErrorMessage(NoSuchTable);
+		} 
+      	break;
+      case PRINT_SHOW_TABLES:
+	    myDbNames = myDbEnvironment.getDatabaseNames();
+	    size = myDbNames.size();
+	    if(size > 0) {
+	      	System.out.println("----------------");
+			for(i=0; i < size; i++) {
+			  System.out.println((String)(myDbNames.get(i)));
+			}
+			System.out.println("----------------");
+		} else {
+      		printErrorMessage(ShowTablesNoTable);
+		}
+      	break;
+      case PRINT_SELECT:
+      	System.out.println("\'SELECT\' requested");
+      	break;
+      case PRINT_INSERT:
+      	System.out.println("\'INSERT\' requested");
+      	break;
+      case PRINT_DELETE:
+      	System.out.println("\'DELETE\' requested");
+      	break;
+    }
+    System.out.print("DB_2016-12299> ");
+
+
+
+    
+  }
+  
+  public static void printErrorMessage(int Em)
+  {
+    switch(Em)
+    {
+      	case SyntaxError:
+      		System.out.println("Syntax error");
+			break;
+		case DuplicateColumnDefError:
+			System.out.println("Create table has failed: column definition is duplicated");
+			break;
+		case DuplicatePrimaryKeyDefError:
+			System.out.println("Create table has failed: primary key definition is duplicated");
+			break;
+		case ReferenceTypeError:
+			System.out.println("Create table has failed: foreign key references wrong type");
+			break;
+		case ReferenceNonPrimaryKeyError:
+			System.out.println("Create table has failed: foreign key references non primary key column");
+			break;
+		case ReferenceColumnExistenceError:
+			System.out.println("Create table has failed: foreign key references non existing column");
+			break;
+		case ReferenceTableExistenceError:
+			System.out.println("Create table has failed: foreign key references non existing table");
+			break;
+		case TableExistenceError:
+			System.out.println("Create table has failed: table with the same name already exists");
+			break;
+		case ShowTablesNoTable:
+			System.out.println("There is no table");
+			break;
+		case NoSuchTable:
+			System.out.println("No such table");
+			break;
+		case CharLengthError:
+			System.out.println("Char length should be over 0");
+			break;
+    }
+  }
+
+  public static void printErrorMessage(int Sm, String Name)
+  {
+    switch(Sm)
+    {
+		case NonExistingColumnDefError:
+			System.out.println("Create table has failed: '" + Name + "' does not exists in column definition");
+			break;
+    }
+  }
+
+  public static void printSuccessMessage(int Sm, String Tablename)
+  {
+    switch(Sm)
+    {
+      	case CreateTableSuccess:
+      		System.out.println("'"+ Tablename +"'" + " table is created");
+			break;
+		case DropSuccess:
+			System.out.println("'"+ Tablename +"'" + " table is dropped");
+			break;
+    }
+  }
+
+  public static class TablePlusContents {
+    private String table_name = null;
+    private ArrayList contents = null;
+
+    public TablePlusContents() {
+        this.table_name = null;
+        this.contents = null;
+    }
+    /*
+    public void setValues(String table_name) {
+        this.table_name = table_name;
+        this.contents = null;
+    }*/
+
+    public void setValues(String table_name, ArrayList contents) {
+        this.table_name = table_name;
+        this.contents = contents;
+    }
+    
+
+    public String getTableName() {
+        return table_name;
+    }
+
+    public ArrayList getContents() {
+        return contents;
+    }
+  }
+  
+}
+
+
+PARSER_END(SimpleDBMSParser)
+
+SKIP : { " " | "\r" | "\t" | "\n" }
+
+TOKEN : /* Keywords */
+{
+  < EXIT : "exit" >
+| < INT : "int" >
+| < CHAR : "char" >
+| < DATE : "date" >
+// for query commands
+| < CREATE_TABLE : "create table" >
+| < DROP_TABLE: "drop table" >
+| < DESC: "desc" >
+| < SHOW_TABLES: "show tables" >
+| < SELECT: "select" >
+| < INSERT_INTO: "insert into" >
+| < DELETE_FROM: "delete from" >
+//
+| < PRIMARY_KEY : "primary key" >
+| < FOREIGN_KEY : "foreign key" >
+| < REFERENCES : "references" >
+| < AS : "as" >
+| < FROM : "from" >
+| < WHERE : "where" >
+| < OR : "or" >
+| < NOT : "not" >
+| < AND : "and" >
+| < IS : "is" >
+| < NULL : "null" >
+| < NOT_NULL : "not null" >
+| < VALUES : "values" >
+// for illegal identifier (red keywords)
+| < NOT_PERMITTED : "create" | "table" | "drop" | "show" | "tables" | "insert" | "into"
+ 				  | "delete" | "primary" | "foreign" | "key" >
+}
+
+TOKEN :
+{
+  < SEMICOLON : ";" >
+| < LEFT_PAREN : "(" >
+| < RIGHT_PAREN : ")" >
+| < COMMA : "," >
+| < PERIOD : "." >
+| < UNDERSCORE : "_" >
+| < HYPHEN : "-" >
+| < ASTERISK : "*" >
+| < QUOTE : "'" >
+| < COMP_OPERATOR :  "<" | ">" | "=" | ">=" | "<=" | "!=" >
+| < SIGN : "+" | "-" >
+| < INT_VALUE : (< SIGN >)? (< DIGIT >)+>
+| < CHAR_STRING : < QUOTE > (< NON_QUOTE_CHARACTER >)* < QUOTE > >
+| < DATE_VALUE : < NNNN > < HYPHEN > < NN > < HYPHEN > < NN > >
+| < NNNN : < DIGIT > < DIGIT > < DIGIT > < DIGIT > > 
+| < NN : < DIGIT > < DIGIT > > 
+| < LEGAL_IDENTIFIER : < ALPHABET > (< ALPHABET > | < UNDERSCORE >)* >
+// 특수문자들
+| < NON_QUOTE_SPECIAL_CHARACTERS : "~"|"`"|"!"|"@"|"#"|"$"|"%"|"^"|"&"|"*"|"("|")"|"-"|"_"|"+"|"=" 
+								  |"{"|"}"|"["|"]"|"\\"|"|"|":"|";"|"<"|">"|","|"."|"?"|"/" >
+| < DIGIT : [ "0"-"9" ] >
+| < ALPHABET : [ "a"-"z", "A"-"Z" ] >
+// " " is for SPACE
+| < NON_QUOTE_CHARACTER : < DIGIT > | < ALPHABET > | < NON_QUOTE_SPECIAL_CHARACTERS > | " " >
+
+}
+
+// 쿼리나 종료문이 들어오는 command
+void command(Environment myDbEnvironment) :
+{}
+{
+  queryList(myDbEnvironment)  // 쿼리 리스트이거나
+| (
+    < EXIT >
+    < SEMICOLON >
+    { 
+      if(myDbEnvironment != null) myDbEnvironment.close();
+      System.exit(0);
+    }
+  ) // exit;
+}
+
+// query들의 list
+void queryList(Environment myDbEnvironment) :
+{
+  ArrayList q;
+}
+{
+  (
+    q = query()
+    < SEMICOLON >
+    {
+      printMessage(q, myDbEnvironment);
+    }
+  )+  // 하나 이상의 쿼리
+}
+
+ArrayList query() :
+{
+  ArrayList q = new ArrayList();
+  int idx;
+  String table_name = new String();
+  TablePlusContents tpc = new TablePlusContents();
+}
+{
+  (
+    tpc = createTableQuery()
+    {
+      idx = PRINT_CREATE_TABLE;
+      q.add(idx);
+      q.add(tpc);
+    }
+   |
+  	table_name = dropTableQuery()
+    {
+      idx = PRINT_DROP_TABLE;
+      q.add(idx);
+      q.add(table_name);
+    }
+   | 
+    table_name = descQuery()
+    {
+      idx = PRINT_DESC;
+      q.add(idx);
+      q.add(table_name);
+    }
+   |
+    showTablesQuery()
+    {
+      idx = PRINT_SHOW_TABLES;
+      q.add(idx);
+    }
+   |
+    selectQuery()
+    {
+	  idx = PRINT_SELECT;
+    }
+   |
+    insertQuery()
+    {
+	  idx = PRINT_INSERT;
+    }
+   |
+    deleteQuery()
+    {
+	  idx = PRINT_DELETE;
+    } 
+  ) 
+  
+  (
+    {
+      return q;
+    }
+  )
+}
+
+// create table 쿼리 시작
+TablePlusContents createTableQuery() :
+{ String t = new String(); ArrayList tel = new ArrayList(); TablePlusContents tpc = new TablePlusContents();}
+{
+  < CREATE_TABLE >
+  t = tableName()
+  tel = tableElementList()
+  {
+    tpc.setValues(t, tel);
+	return tpc;
+  }
+} 
+
+// table의 element list ex > (column_one int not null, ...)
+ArrayList tableElementList() :
+{ ArrayList tel = new ArrayList(); ArrayList te = new ArrayList(); }
+{
+  < LEFT_PAREN >
+  te = tableElement()
+  {
+	tel.add(te);
+  }
+  (
+    < COMMA >
+    te = tableElement()
+    {
+	  tel.add(te);
+    }
+  )*
+  < RIGHT_PAREN >
+  {
+	return tel;
+  }
+}
+
+// one table element ex > column_one int not null
+ArrayList tableElement() :
+{ ArrayList te = new ArrayList(); }
+{
+(  
+  te = columnDefinition()
+| te = tableConstraintDefinition()
+)
+{
+  return te;
+}
+}
+
+ArrayList<String> columnDefinition() :
+{ ArrayList<String> cd = new ArrayList(); String column_name = new String(); String data_type = new String();
+  Token not_null = new Token(); String not_null_str = new String();}
+{
+(
+  column_name = columnName()
+  data_type = dataType()
+  (
+    not_null = < NOT_NULL >
+    {
+      not_null_str = not_null.image.toLowerCase();
+    }
+  )?
+)
+  {
+	cd.add(column_name);
+	cd.add(data_type);
+	cd.add(not_null_str);
+	return cd;
+  }
+}
+
+// primary key or foreign key 부분 시작
+ArrayList tableConstraintDefinition() :
+{ ArrayList tcd = new ArrayList();}
+{
+( 
+  tcd = primaryKeyConstraint()
+| tcd = referentialConstraint()
+)
+{
+	return tcd;
+}	
+}
+
+// for primary key
+ArrayList primaryKeyConstraint() :
+{ ArrayList pkc = new ArrayList(); Token primary_key; ArrayList<String> cnl = new ArrayList(); }
+{
+  primary_key = < PRIMARY_KEY >
+  cnl = columnNameList()
+  {
+	pkc.add(primary_key.image.toLowerCase());
+	pkc.add(cnl);
+	return pkc;
+  }
+}
+
+// for foreign key
+ArrayList referentialConstraint() :
+{ ArrayList fkc = new ArrayList(); Token foreign_key;
+  ArrayList<String> cnl = new ArrayList(); ArrayList<String> cnl2 = new ArrayList(); String table_name = new String(); }
+{
+  foreign_key = < FOREIGN_KEY >
+  cnl = columnNameList()
+  < REFERENCES >
+  table_name = tableName()
+  cnl2 = columnNameList()
+  {
+    fkc.add(foreign_key.image.toLowerCase());
+    fkc.add(cnl);
+    fkc.add(table_name);
+    fkc.add(cnl2);
+	return fkc;
+  }
+}
+
+// column 이름 나열 ex > (column_one, column_two, ...)
+ArrayList<String> columnNameList() :
+{ ArrayList<String> cnl = new ArrayList(); String column_name = new String();}
+{
+  < LEFT_PAREN >
+  column_name = columnName()
+  {
+	cnl.add(column_name);
+  }
+  (
+    < COMMA >
+    column_name = columnName()
+    {
+	cnl.add(column_name);
+    }
+  )*
+  < RIGHT_PAREN >
+  {
+	return cnl;
+  }
+}
+
+// ex > int, char(20), date
+String dataType() :
+{ Token data_type; Token[] size = new Token[3];}
+{
+(
+  data_type = < INT >
+| (
+    data_type = < CHAR >
+    size[0] = < LEFT_PAREN >
+    size[1] = < INT_VALUE >
+    size[2] = < RIGHT_PAREN >
+  )
+| data_type = < DATE >
+)
+{
+  	if(!(data_type.image.toLowerCase()).equals("char")) {
+		return data_type.image.toLowerCase();
+  	} else {
+		return data_type.image.toLowerCase() + size[0].image + size[1].image + size[2].image;
+  	}
+}
+}
+
+// table 이름은 legal identifier여야 함
+String tableName() :
+{ Token table_name; }
+{
+	table_name = < LEGAL_IDENTIFIER >
+	{
+	  return table_name.image.toLowerCase();
+	}
+}
+
+// column 이름은 legal identifier여야 함
+String columnName() :
+{ Token column_name; }
+{
+  column_name = < LEGAL_IDENTIFIER >
+  {
+	return column_name.image.toLowerCase();
+  }
+}
+
+// drop table 쿼리 시작
+String dropTableQuery() :
+{ String t; }
+{
+  < DROP_TABLE >
+  // ★★drop tables 버그 있음!!!★★
+  t = tableName()
+  {
+	return t;
+  }
+}
+
+// desc 쿼리 시작
+String descQuery() :
+{ String t; }
+{
+  < DESC >
+  t = tableName()
+  {
+	return t;
+  }
+}
+
+// show tables 쿼리 시작
+void showTablesQuery() :
+{}
+{
+  < SHOW_TABLES >
+}
+// select 쿼리 시작
+void selectQuery() :
+{}
+{
+  < SELECT >
+  selectList()
+  tableExpression()
+}
+
+// * 이거나 column들
+void selectList() :
+{}
+{
+  < ASTERISK > // *
+| (
+    selectColumn()
+    (
+	  < COMMA >
+	  selectColumn()
+    )*
+  ) // 하나 이상의 column
+}
+
+// ex > table_name.column_name as as_name
+void selectColumn() :
+{}
+{  
+  (
+    LOOKAHEAD(4) // compOperand와 nullPredicate과 충돌하므로 lookahead로 방지
+	tableName()
+	< PERIOD >
+  )?
+  columnName()
+  (  
+	< AS >
+	columnName()
+  )?
+}
+
+// from where 
+void tableExpression() :
+{}
+{
+  fromClause()
+  (
+	whereClause()
+  )?
+}
+
+// from 부분 시작
+void fromClause() :
+{}
+{
+  < FROM >
+  tableReferenceList()
+}
+
+void tableReferenceList() :
+{}
+{
+  referedTable()
+  (
+    < COMMA >
+    referedTable()
+  )*
+}
+
+void referedTable() :
+{}
+{
+  tableName()
+  (  
+	< AS >
+	tableName()
+  )?
+}
+
+// where 부분 시작
+void whereClause() :
+{}
+{
+  < WHERE >
+  booleanValueExpression()
+}
+
+void booleanValueExpression() :
+{}
+{
+  booleanTerm()
+  (
+	< OR >
+	booleanTerm()
+  )*
+}
+
+void booleanTerm() :
+{}
+{
+  booleanFactor()
+  (
+	< AND >
+	booleanFactor()
+  )*
+}
+
+void booleanFactor() :
+{}
+{
+  (  
+	< NOT >
+  )?
+  booleanTest()
+}
+
+void booleanTest() :
+{}
+{
+  predicate()
+| parenthesizedBooleanExpression()
+}
+
+void parenthesizedBooleanExpression() :
+{}
+{
+  < LEFT_PAREN >
+  booleanValueExpression()
+  < RIGHT_PAREN >
+}
+
+void predicate() :
+{}
+{
+  LOOKAHEAD(4)
+  comparisonPredicate()
+| nullPredicate()
+}
+
+// ex > s_count >= 4
+void comparisonPredicate() :
+{}
+{
+  compOperand()
+  compOp()
+  compOperand()
+}
+
+void compOperand() :
+{}
+{
+  comparableValue()
+| (
+    (
+      LOOKAHEAD(4)  // 충돌 방지
+      tableName()
+      < PERIOD >
+    )?
+    columnName()
+  )
+}
+
+void compOp() :
+{}
+{
+  < COMP_OPERATOR >
+}
+
+void comparableValue() :
+{}
+{
+  < INT_VALUE >
+| < CHAR_STRING >
+| < DATE_VALUE >
+}
+
+void nullPredicate() :
+{}
+{
+  (
+    LOOKAHEAD(4)  // 충돌 방지
+	tableName()
+	< PERIOD >
+  )?
+  columnName()
+  nullOperation()
+}
+
+void nullOperation() :
+{}
+{
+  < IS >
+(
+  < NULL > // null
+| < NOT_NULL > // not null
+| < NOT > < NULL > // not   null
+)
+  
+}
+
+// insert 쿼리 시작
+void insertQuery() :
+{}
+{
+  < INSERT_INTO >
+  tableName()
+  insertColumnsAndSource()
+}
+
+void insertColumnsAndSource() :
+{}
+{
+  (
+    columnNameList()
+  )?
+  valueList()
+}
+
+// values (1, 'John', 3516-32-11)
+void valueList() :
+{}
+{
+  < VALUES >
+  < LEFT_PAREN >
+  value()
+  (
+    < COMMA >
+    value()
+  )*
+  < RIGHT_PAREN >
+}
+
+void value() :
+{}
+{
+  < NULL >
+| comparableValue()
+}
+
+// delete from 쿼리 시작
+void deleteQuery() :
+{}
+{
+  < DELETE_FROM >
+  tableName()
+  (
+    whereClause()
+  )?
+}
