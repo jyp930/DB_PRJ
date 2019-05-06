@@ -1,0 +1,589 @@
+options
+{
+  static = true;
+  DEBUG_PARSER = false;
+  IGNORE_CASE = true;
+}
+
+PARSER_BEGIN(SimpleDBMSParser)
+package QueryParser;
+
+public class SimpleDBMSParser 
+{
+  // ENUM FOR PRINT_VALUE
+  public static final int PRINT_SYNTAX_ERROR = 0;
+  public static final int PRINT_CREATE_TABLE = 1;
+  public static final int PRINT_DROP_TABLE = 2;
+  public static final int PRINT_DESC = 3;
+  public static final int PRINT_SHOW_TABLES = 4;
+  public static final int PRINT_SELECT = 5;
+  public static final int PRINT_INSERT = 6;
+  public static final int PRINT_DELETE = 7;
+  
+  public static void main(String args[]) throws ParseException
+  {
+    SimpleDBMSParser parser = new SimpleDBMSParser(System.in);
+    System.out.print("DB_2016-12299> ");
+
+    while (true)
+    {
+      try
+      {
+        parser.command(); // command 실행
+      }
+      catch (Exception e)
+      {
+        printMessage(PRINT_SYNTAX_ERROR);
+        SimpleDBMSParser.ReInit(System.in);
+      }
+    }
+  }
+
+  public static void printMessage(int q)
+  {
+    switch(q)
+    {
+      case PRINT_SYNTAX_ERROR:
+      	System.out.println("Syntax error");
+      	break;
+      case PRINT_CREATE_TABLE:
+      	System.out.println("\'CREATE TABLE\' requested");
+      	break;
+      case PRINT_DROP_TABLE:
+      	System.out.println("\'DROP TABLE\' requested");
+      	break;
+      case PRINT_DESC:
+      	System.out.println("\'DESC\' requested");
+      	break;
+      case PRINT_SHOW_TABLES:
+      	System.out.println("\'SHOW TABLES\' requested");
+      	break;
+      case PRINT_SELECT:
+      	System.out.println("\'SELECT\' requested");
+      	break;
+      case PRINT_INSERT:
+      	System.out.println("\'INSERT\' requested");
+      	break;
+      case PRINT_DELETE:
+      	System.out.println("\'DELETE\' requested");
+      	break;
+    }
+    System.out.print("DB_2016-12299> ");
+  }
+}
+
+PARSER_END(SimpleDBMSParser)
+
+SKIP : { " " | "\r" | "\t" | "\n" }
+
+TOKEN : /* Keywords */
+{
+  < EXIT : "exit" >
+| < INT : "int" >
+| < CHAR : "char" >
+| < DATE : "date" >
+// for query commands
+| < CREATE_TABLE : "create table" >
+| < DROP_TABLE: "drop table" >
+| < DESC: "desc" >
+| < SHOW_TABLES: "show tables" >
+| < SELECT: "select" >
+| < INSERT_INTO: "insert into" >
+| < DELETE_FROM: "delete from" >
+//
+| < PRIMARY_KEY : "primary key" >
+| < FOREIGN_KEY : "foreign key" >
+| < REFERENCES : "references" >
+| < AS : "as" >
+| < FROM : "from" >
+| < WHERE : "where" >
+| < OR : "or" >
+| < NOT : "not" >
+| < AND : "and" >
+| < IS : "is" >
+| < NULL : "null" >
+| < NOT_NULL : "not null" >
+| < VALUES : "values" >
+// for illegal identifier (red keywords)
+| < NOT_PERMITTED : "create" | "table" | "drop" | "show" | "tables" | "insert" | "into"
+ 				  | "delete" | "primary" | "foreign" | "key" >
+}
+
+TOKEN :
+{
+  < SEMICOLON : ";" >
+| < LEFT_PAREN : "(" >
+| < RIGHT_PAREN : ")" >
+| < COMMA : "," >
+| < PERIOD : "." >
+| < UNDERSCORE : "_" >
+| < HYPHEN : "-" >
+| < ASTERISK : "*" >
+| < QUOTE : "'" >
+| < COMP_OPERATOR :  "<" | ">" | "=" | ">=" | "<=" | "!=" >
+| < SIGN : "+" | "-" >
+| < INT_VALUE : (< SIGN >)? (< DIGIT >)+>
+| < CHAR_STRING : < QUOTE > (< NON_QUOTE_CHARACTER >)* < QUOTE > >
+| < DATE_VALUE : < NNNN > < HYPHEN > < NN > < HYPHEN > < NN > >
+| < NNNN : < DIGIT > < DIGIT > < DIGIT > < DIGIT > > 
+| < NN : < DIGIT > < DIGIT > > 
+| < LEGAL_IDENTIFIER : < ALPHABET > (< ALPHABET > | < UNDERSCORE >)* >
+// 특수문자들
+| < NON_QUOTE_SPECIAL_CHARACTERS : "~"|"`"|"!"|"@"|"#"|"$"|"%"|"^"|"&"|"*"|"("|")"|"-"|"_"|"+"|"=" 
+								  |"{"|"}"|"["|"]"|"\\"|"|"|":"|";"|"<"|">"|","|"."|"?"|"/" >
+| < DIGIT : [ "0"-"9" ] >
+| < ALPHABET : [ "a"-"z", "A"-"Z" ] >
+// " " is for SPACE
+| < NON_QUOTE_CHARACTER : < DIGIT > | < ALPHABET > | < NON_QUOTE_SPECIAL_CHARACTERS > | " " >
+
+}
+
+// 쿼리나 종료문이 들어오는 command
+void command() :
+{}
+{
+  queryList()  // 쿼리 리스트이거나
+| (
+    < EXIT >
+    < SEMICOLON >
+    {
+      System.exit(0);
+    }
+  ) // exit;
+}
+
+// query들의 list
+void queryList() :
+{
+  int q;
+}
+{
+  (
+    q = query()
+    < SEMICOLON >
+    {
+      printMessage(q);
+    }
+  )+  // 하나 이상의 쿼리
+}
+
+int query() :
+{
+  int q;
+}
+{
+  (
+    createTableQuery()
+    {
+      q = PRINT_CREATE_TABLE;
+    }
+   |
+  	dropTableQuery()
+    {
+      q = PRINT_DROP_TABLE;
+    }
+   | 
+    descQuery()
+    {
+      q = PRINT_DESC;
+    }
+   |
+    showTablesQuery()
+    {
+      q = PRINT_SHOW_TABLES;
+    }
+   |
+    selectQuery()
+    {
+	  q = PRINT_SELECT;
+    }
+   |
+    insertQuery()
+    {
+	  q = PRINT_INSERT;
+    }
+   |
+    deleteQuery()
+    {
+	  q = PRINT_DELETE;
+    } 
+  ) 
+  
+  (
+    {
+      return q;
+    }
+  )
+}
+
+// create table 쿼리 시작
+void createTableQuery() :
+{}
+{
+  < CREATE_TABLE >
+  tableName()
+  tableElementList()
+} 
+
+// table의 element list ex > (column_one int not null, ...)
+void tableElementList() :
+{}
+{
+  < LEFT_PAREN >
+  tableElement()
+  (
+    < COMMA >
+    tableElement()
+  )*
+  < RIGHT_PAREN >
+}
+
+// one table element ex > column_one int not null
+void tableElement() :
+{
+}
+{
+  columnDefinition()
+| tableConstraintDefinition()
+}
+
+void columnDefinition() :
+{}
+{
+  columnName()
+  dataType()
+  (
+    < NOT_NULL >
+  )?
+}
+
+// primary key or foreign key 부분 시작
+void tableConstraintDefinition() :
+{}
+{
+  primaryKeyConstraint()
+| referentialConstraint()
+}
+
+// for primary key
+void primaryKeyConstraint() :
+{}
+{
+  < PRIMARY_KEY >
+  columnNameList()
+}
+
+// for foreign key
+void referentialConstraint() :
+{}
+{
+  < FOREIGN_KEY >
+  columnNameList()
+  < REFERENCES >
+  tableName()
+  columnNameList()
+}
+
+// column 이름 나열 ex > (column_one, column_two, ...)
+void columnNameList() :
+{}
+{
+  < LEFT_PAREN >
+  columnName()
+  (
+    < COMMA >
+    columnName()
+  )*
+  < RIGHT_PAREN >
+}
+
+// ex > int, char(20), date
+void dataType() :
+{}
+{
+  < INT >
+| (
+    < CHAR >
+    < LEFT_PAREN >
+    < INT_VALUE >
+    < RIGHT_PAREN >
+  )
+| < DATE >
+}
+
+// table 이름은 legal identifier여야 함
+void tableName() :
+{}
+{
+  < LEGAL_IDENTIFIER >
+}
+
+// column 이름은 legal identifier여야 함
+void columnName() :
+{}
+{
+  < LEGAL_IDENTIFIER >
+}
+
+// drop table 쿼리 시작
+void dropTableQuery() :
+{}
+{
+  < DROP_TABLE >
+  tableName()
+}
+
+// desc 쿼리 시작
+void descQuery() :
+{}
+{
+  < DESC >
+  tableName()
+}
+
+// show tables 쿼리 시작
+void showTablesQuery() :
+{}
+{
+  < SHOW_TABLES >
+}
+// select 쿼리 시작
+void selectQuery() :
+{}
+{
+  < SELECT >
+  selectList()
+  tableExpression()
+}
+
+// * 이거나 column들
+void selectList() :
+{}
+{
+  < ASTERISK > // *
+| (
+    selectColumn()
+    (	  < COMMA >
+	  selectColumn()
+    )*
+  ) // 하나 이상의 column
+}
+
+// ex > table_name.column_name as as_name
+void selectColumn() :
+{}
+{  
+  (
+    LOOKAHEAD(4) // compOperand와 nullPredicate과 충돌하므로 lookahead로 방지
+	tableName()
+	< PERIOD >
+  )?
+  columnName()
+  (  
+	< AS >
+	columnName()
+  )?
+}
+
+// from where 
+void tableExpression() :
+{}
+{
+  fromClause()
+  (
+	whereClause()
+  )?
+}
+
+// from 부분 시작
+void fromClause() :
+{}
+{
+  < FROM >
+  tableReferenceList()
+}
+
+void tableReferenceList() :
+{}
+{
+  referedTable()
+  (    < COMMA >
+    referedTable()
+  )*
+}
+
+void referedTable() :
+{}
+{
+  tableName()
+  (  
+	< AS >
+	tableName()
+  )?
+}
+
+// where 부분 시작
+void whereClause() :
+{}
+{
+  < WHERE >
+  booleanValueExpression()
+}
+
+void booleanValueExpression() :
+{}
+{
+  booleanTerm()
+  (	< OR >
+	booleanTerm()
+  )*
+}
+
+void booleanTerm() :
+{}
+{
+  booleanFactor()
+  (	< AND >
+	booleanFactor()
+  )*
+}
+
+void booleanFactor() :
+{}
+{
+  (  
+	< NOT >
+  )?
+  booleanTest()
+}
+
+void booleanTest() :
+{}
+{
+  predicate()
+| parenthesizedBooleanExpression()
+}
+
+void parenthesizedBooleanExpression() :
+{}
+{
+  < LEFT_PAREN >
+  booleanValueExpression()
+  < RIGHT_PAREN >
+}
+
+void predicate() :
+{}
+{
+  LOOKAHEAD(4)
+  comparisonPredicate()
+| nullPredicate()
+}
+
+// ex > s_count >= 4
+void comparisonPredicate() :
+{}
+{
+  compOperand()
+  compOp()
+  compOperand()
+}
+
+void compOperand() :
+{}
+{
+  comparableValue()
+| (
+    (
+      LOOKAHEAD(4)  // 충돌 방지
+      tableName()
+      < PERIOD >
+    )?
+    columnName()
+  )
+}
+
+void compOp() :
+{}
+{
+  < COMP_OPERATOR >
+}
+
+void comparableValue() :
+{}
+{
+  < INT_VALUE >
+| < CHAR_STRING >
+| < DATE_VALUE >
+}
+
+void nullPredicate() :
+{}
+{
+  (
+    LOOKAHEAD(4)  // 충돌 방지
+	tableName()
+	< PERIOD >
+  )?
+  columnName()
+  nullOperation()
+}
+
+void nullOperation() :
+{}
+{
+  < IS >
+(
+  < NULL > // null
+| < NOT_NULL > // not null
+| < NOT > < NULL > // not   null
+)
+  
+}
+
+// insert 쿼리 시작
+void insertQuery() :
+{}
+{
+  < INSERT_INTO >
+  tableName()
+  insertColumnsAndSource()
+}
+
+void insertColumnsAndSource() :
+{}
+{
+  (    columnNameList()
+  )?
+  valueList()
+}
+
+// values (1, 'John', 3516-32-11)
+void valueList() :
+{}
+{
+  < VALUES >
+  < LEFT_PAREN >
+  value()
+  (    < COMMA >
+    value()
+  )*
+  < RIGHT_PAREN >
+}
+
+void value() :
+{}
+{
+  < NULL >
+| comparableValue()
+}
+
+// delete from 쿼리 시작
+void deleteQuery() :
+{}
+{
+  < DELETE_FROM >
+  tableName()
+  (    whereClause()
+  )?
+}

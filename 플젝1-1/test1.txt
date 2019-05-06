@@ -1,0 +1,63 @@
+1. create table
+
+create table table_a (
+	number_ int,
+	number__ int not null,
+	name_ char(22),
+ 	d_day date not null,
+	primary key(name_),
+	foreign key(gb) references qq (gg, a_a)
+);
+
+
+create table table_a (
+	number_ int,
+	number__ int not null,
+	name_ char(22),
+ 	d_day date not null,
+	primary key(name_),
+	foreign key(gb) references qq (ppap),
+	primary key(name_,assag),
+	foreign key(gb) references qq (gg, a_a)
+);
+
+create table table_a (
+	number_ int,
+	number__ int not null,
+	name_ char(22),
+ 	d_day date not null,
+	primary key(name_),
+	foreign key(gb) references qq (ppap),
+	primary key(name_,assag),
+	foreign key(gb) references qq
+);
+=>error
+
+create table table_a (
+	number_ int,
+	number__ int not  null,
+	name_ char(22),
+ 	d_day date not null,
+	primary key(name_),
+	foreign key(gb) references qq (ppap),
+	primary key(name_,assag),
+	foreign key(gb) references qq (gg, a_a)
+);
+=> error
+
+
+
+2. insert
+
+insert into table_b (c_A,c_b,c_c) values (1,2);
+
+insert into table_b   values   (null, '~`!@#$%^ &*()_-+ ={[}]\|?    />.<,');
+	
+insert into table_b (c_A,c_b,c_c) values (1,'sa!$#315^&^*?><=+\~1`|gs'   ,   null);
+
+InseRt INTo tablE_b (c_A,c_b,c_c) values ('','sa!$#315^&^*?><=+\~1`|gs', null);
+
+InseRt INTo tablE_b (c_A,c_b,c_c) values ('','sa!$#315^&^*?><=+\~1`|gs', null, 3333-55-66);
+
+InseRt INTo tablE_b (c_A,c_b,c_c) values ('','sa!$#315^&^*?><=+\~1`|gs', null, 3333-556-66);
+=> error
